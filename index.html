@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy Bird</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #111;
+            font-family: sans-serif;
+        }
+        canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+
+    <script>
+        const canvasElement = document.getElementById('gameCanvas');
+        const canvasCtx = canvasElement.getContext('2d');
+
+        const STATES = {
+            START: 'START',
+            COUNTDOWN: 'COUNTDOWN',
+            PLAYING: 'PLAYING',
+            GAMEOVER: 'GAMEOVER'
+        };
+        let currentState = STATES.START;
+
+        // --- 遊戲變數 ---
+        const WIDTH = canvasElement.width;
+        const HEIGHT = canvasElement.height;
+        const GROUND_HEIGHT = 50; 
+        
+        let bird = { x: WIDTH / 3, y: HEIGHT / 2, radius: 22, velocity: 0, gravity: 0.5, flapPower: -10 };
+        let pipe = { x: WIDTH, width: 90, gap: 280, speed: 6, topHeight: 0 }; 
+        
+        let score = 0;
+        let audioCtx = null;
+        let countdownNumber = 3;
+        let countdownInterval = null;
+
+        // 復古跳躍音效
+        function playJumpSound() {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'triangle'; 
+                osc.frequency.setValueAtTime(250, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(550, audioCtx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+            } catch (e) {}
+        }
+
+        function triggerFlap() {
+            bird.velocity = bird.flapPower;
+            playJumpSound(); 
+        }
+
+        function resetPipe() {
+            pipe.x = WIDTH;
+            pipe.topHeight = Math.floor(Math.random() * (HEIGHT - GROUND_HEIGHT - pipe.gap - 150)) + 70;
+        }
+
+        function startCountdown() {
+            bird.y = HEIGHT / 2;
+            bird.velocity = 0;
+            score = 0;
+            resetPipe();
+            currentState = STATES.COUNTDOWN;
+            countdownNumber = 3;
+
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+            if (countdownInterval) clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {
+                countdownNumber--;
+                if (countdownNumber <= 0) {
+                    clearInterval(countdownInterval);
+                    currentState = STATES.PLAYING;
+                    triggerFlap(); // 倒數結束立即起飛
+                }
+            }, 1000);
+        }
+
+        // 按鍵監聽 (W鍵跳躍)
+        window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'w') {
+                if (currentState === STATES.PLAYING) {
+                    triggerFlap();
+                } else if (currentState === STATES.START || currentState === STATES.GAMEOVER) {
+                    startCountdown();
+                }
+            } else if (key === 'r' && currentState === STATES.GAMEOVER) {
+                startCountdown();
+            }
+        });
+
+        function gameLoop() {
+            // 1. 背景
+            canvasCtx.fillStyle = '#70c5ce';
+            canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+
+            // 2. 遊戲物理邏輯
+            if (currentState === STATES.PLAYING) {
+                bird.velocity += bird.gravity;
+                bird.y += bird.velocity;
+
+                pipe.x -= pipe.speed;
+                if (pipe.x < -pipe.width) {
+                    resetPipe();
+                    score++;
+                }
+
+                // 碰撞判定 (邊界與水管)
+                if (bird.y - bird.radius < 0 || bird.y + bird.radius > HEIGHT - GROUND_HEIGHT) {
+                    currentState = STATES.GAMEOVER;
+                }
+                if (bird.x + bird.radius > pipe.x && bird.x - bird.radius < pipe.x + pipe.width) {
+                    if (bird.y - bird.radius < pipe.topHeight || bird.y + bird.radius > pipe.topHeight + pipe.gap) {
+                        currentState = STATES.GAMEOVER;
+                    }
+                }
+            }
+
+            // 3. 繪製遊戲主體 (COUNTDOWN / PLAYING / GAMEOVER)
+            if (currentState === STATES.PLAYING || currentState === STATES.GAMEOVER || currentState === STATES.COUNTDOWN) {
+                // 水管
+                canvasCtx.fillStyle = '#73bf2e';
+                canvasCtx.fillRect(pipe.x, 0, pipe.width, pipe.topHeight);
+                canvasCtx.fillRect(pipe.x, pipe.topHeight + pipe.gap, pipe.width, HEIGHT - GROUND_HEIGHT - (pipe.topHeight + pipe.gap));
+                
+                canvasCtx.strokeStyle = '#53821a';
+                canvasCtx.lineWidth = 4;
+                canvasCtx.strokeRect(pipe.x, 0, pipe.width, pipe.topHeight);
+                canvasCtx.strokeRect(pipe.x, pipe.topHeight + pipe.gap, pipe.width, HEIGHT - GROUND_HEIGHT - (pipe.topHeight + pipe.gap));
+
+                // 地板
+                canvasCtx.fillStyle = '#ded895';
+                canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, GROUND_HEIGHT);
+                canvasCtx.fillStyle = '#4fa32d';
+                canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, 12);
+
+                // 小鳥
+                canvasCtx.beginPath();
+                canvasCtx.arc(bird.x, bird.y, bird.radius, 0, 2 * Math.PI);
+                canvasCtx.fillStyle = '#f61010';
+                canvasCtx.fill();
+                canvasCtx.strokeStyle = '#000';
+                canvasCtx.lineWidth = 3;
+                canvasCtx.stroke();
+
+                // 分數
+                canvasCtx.fillStyle = 'white';
+                canvasCtx.strokeStyle = 'black';
+                canvasCtx.lineWidth = 6;
+                canvasCtx.font = 'bold 45px Arial';
+                canvasCtx.textAlign = 'right';
+                canvasCtx.strokeText(`Score: ${score}`, WIDTH - 40, 70);
+                canvasCtx.fillText(`Score: ${score}`, WIDTH - 40, 70);
+            }
+
+            // 4. 畫面 overlay 狀態處理
+            if (currentState === STATES.START) {
+                // 地板與背景
+                canvasCtx.fillStyle = '#ded895';
+                canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, GROUND_HEIGHT);
+                canvasCtx.fillStyle = '#4fa32d';
+                canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, 12);
+
+                // 小鳥
+                canvasCtx.beginPath();
+                canvasCtx.arc(bird.x, bird.y, bird.radius, 0, 2 * Math.PI);
+                canvasCtx.fillStyle = '#f61010';
+                canvasCtx.fill();
+                canvasCtx.strokeStyle = '#000';
+                canvasCtx.lineWidth = 3;
+                canvasCtx.stroke();
+
+                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+                canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+
+                canvasCtx.fillStyle = '#ffffff';
+                canvasCtx.font = 'bold 60px Arial';
+                canvasCtx.textAlign = 'center';
+                canvasCtx.fillText("Flappy Bird", WIDTH / 2, HEIGHT / 2);
+            } else if (currentState === STATES.COUNTDOWN) {
+                // 3秒倒數蒙版與數字顯示
+                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+
+                canvasCtx.fillStyle = '#ffffff';
+                canvasCtx.strokeStyle = '#000000';
+                canvasCtx.lineWidth = 8;
+                canvasCtx.font = 'bold 120px Arial';
+                canvasCtx.textAlign = 'center';
+                canvasCtx.strokeText(countdownNumber, WIDTH / 2, HEIGHT / 2 + 40);
+                canvasCtx.fillText(countdownNumber, WIDTH / 2, HEIGHT / 2 + 40);
+            } else if (currentState === STATES.GAMEOVER) {
+                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+                
+                canvasCtx.fillStyle = '#f61010';
+                canvasCtx.font = 'bold 70px Arial';
+                canvasCtx.textAlign = 'center';
+                canvasCtx.fillText("GAME OVER", WIDTH / 2, HEIGHT / 2);
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        resetPipe();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
