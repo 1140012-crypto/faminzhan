@@ -166,14 +166,16 @@
                 canvasCtx.lineWidth = 3;
                 canvasCtx.stroke();
 
-                // 分數
-                canvasCtx.fillStyle = 'white';
-                canvasCtx.strokeStyle = 'black';
-                canvasCtx.lineWidth = 6;
-                canvasCtx.font = 'bold 45px Arial';
-                canvasCtx.textAlign = 'right';
-                canvasCtx.strokeText(`Score: ${score}`, WIDTH - 40, 70);
-                canvasCtx.fillText(`Score: ${score}`, WIDTH - 40, 70);
+                // 遊戲進行中時顯示右上角分數
+                if (currentState === STATES.PLAYING) {
+                    canvasCtx.fillStyle = 'white';
+                    canvasCtx.strokeStyle = 'black';
+                    canvasCtx.lineWidth = 6;
+                    canvasCtx.font = 'bold 45px Arial';
+                    canvasCtx.textAlign = 'right';
+                    canvasCtx.strokeText(`Score: ${score}`, WIDTH - 40, 70);
+                    canvasCtx.fillText(`Score: ${score}`, WIDTH - 40, 70);
+                }
             }
 
             // 4. 畫面 overlay 狀態處理
@@ -216,10 +218,19 @@
                 canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
                 canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
                 
+                // GAME OVER 標題
                 canvasCtx.fillStyle = '#f61010';
                 canvasCtx.font = 'bold 70px Arial';
                 canvasCtx.textAlign = 'center';
-                canvasCtx.fillText("GAME OVER", WIDTH / 2, HEIGHT / 2);
+                canvasCtx.fillText("GAME OVER", WIDTH / 2, HEIGHT / 2 - 50);
+
+                // 正中央顯示最終分數
+                canvasCtx.fillStyle = '#ffffff';
+                canvasCtx.strokeStyle = '#000000';
+                canvasCtx.lineWidth = 6;
+                canvasCtx.font = 'bold 50px Arial';
+                canvasCtx.strokeText(`Score: ${score}`, WIDTH / 2, HEIGHT / 2 + 30);
+                canvasCtx.fillText(`Score: ${score}`, WIDTH / 2, HEIGHT / 2 + 30);
             }
 
             requestAnimationFrame(gameLoop);
