@@ -3,26 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flappy Bird</title>
+    <title>晴空飛行 · Flappy Bird</title>
     <style>
+        * { box-sizing: border-box; }
         html, body {
             margin: 0;
-            padding: 0;
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background-color: #111;
-            font-family: sans-serif;
+            background: #143e4d;
+            font-family: system-ui, sans-serif;
+        }
+        body {
+            display: grid;
+            place-items: center;
+            background: radial-gradient(ellipse at top, #346473, #102f3d);
         }
         canvas {
-            width: 100vw;
-            height: 100vh;
             display: block;
+            width: min(100vw, 177.7778vh);
+            height: auto;
+            max-height: 100vh;
+            aspect-ratio: 16/9;
+            box-shadow: 0 24px 100px #071c3280;
+            touch-action: none;
         }
     </style>
 </head>
 <body>
-
     <canvas id="gameCanvas" width="1280" height="720"></canvas>
 
     <script>
@@ -37,44 +45,72 @@
         };
         let currentState = STATES.START;
 
-        // --- 遊戲變數 ---
         const WIDTH = canvasElement.width;
         const HEIGHT = canvasElement.height;
-        const GROUND_HEIGHT = 50; 
-        
-        let bird = { x: WIDTH / 3, y: HEIGHT / 2, radius: 22, velocity: 0, gravity: 0.5, flapPower: -10 };
-        let pipe = { x: WIDTH, width: 90, gap: 280, speed: 6, topHeight: 0 }; 
-        
+        const GROUND_HEIGHT = 50;
+
+        let bird = {
+            x: WIDTH / 3,
+            y: HEIGHT / 2,
+            radius: 22,
+            velocity: 0,
+            gravity: 0.5,
+            flapPower: -10
+        };
+        let pipe = {
+            x: WIDTH,
+            width: 90,
+            gap: 280,
+            speed: 6,
+            topHeight: 0
+        };
+
         let score = 0;
         let audioCtx = null;
         let countdownNumber = 3;
         let countdownInterval = null;
 
-        // 復古跳躍音效
+        // 拍翅音效
         function playJumpSound() {
             try {
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (!audioCtx) {
+                    audioCtx = new (
+                        window.AudioContext || window.webkitAudioContext
+                    )();
+                }
                 if (audioCtx.state === 'suspended') audioCtx.resume();
+
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
-                osc.connect(gain); gain.connect(audioCtx.destination);
-                osc.type = 'triangle'; 
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.type = 'triangle';
                 osc.frequency.setValueAtTime(250, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(550, audioCtx.currentTime + 0.12);
+                osc.frequency.exponentialRampToValueAtTime(
+                    550, audioCtx.currentTime + 0.12
+                );
                 gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.12);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.12);
+                gain.gain.exponentialRampToValueAtTime(
+                    0.01, audioCtx.currentTime + 0.12
+                );
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.12);
             } catch (e) {}
         }
 
         function triggerFlap() {
             bird.velocity = bird.flapPower;
-            playJumpSound(); 
+            playJumpSound();
         }
 
         function resetPipe() {
             pipe.x = WIDTH;
-            pipe.topHeight = Math.floor(Math.random() * (HEIGHT - GROUND_HEIGHT - pipe.gap - 150)) + 70;
+            pipe.topHeight = Math.floor(
+                Math.random() * (
+                    HEIGHT - GROUND_HEIGHT - pipe.gap - 150
+                )
+            ) + 70;
         }
 
         function startCountdown() {
@@ -93,31 +129,305 @@
                 if (countdownNumber <= 0) {
                     clearInterval(countdownInterval);
                     currentState = STATES.PLAYING;
-                    triggerFlap(); // 倒數結束立即起飛
+                    triggerFlap();
                 }
             }, 1000);
         }
 
-        // 按鍵監聽 (W鍵跳躍)
+        // W 拍翅；遊戲結束後可按 W 或 R 重玩
         window.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
             if (key === 'w') {
                 if (currentState === STATES.PLAYING) {
                     triggerFlap();
-                } else if (currentState === STATES.START || currentState === STATES.GAMEOVER) {
+                } else if (
+                    currentState === STATES.START ||
+                    currentState === STATES.GAMEOVER
+                ) {
                     startCountdown();
                 }
-            } else if (key === 'r' && currentState === STATES.GAMEOVER) {
+            } else if (
+                key === 'r' && currentState === STATES.GAMEOVER
+            ) {
+                startCountdown();
+            }
+        });
+
+        let visualFrame = 0;
+        let best = 0;
+        try {
+            best = Number(localStorage.getItem('skyBirdBest')) || 0;
+        } catch (e) {}
+
+        const c = canvasCtx;
+
+        function pill(x, y, w, h, color, r = 20) {
+            c.beginPath();
+            c.roundRect(x, y, w, h, r);
+            c.fillStyle = color;
+            c.fill();
+        }
+
+        function label(
+            text, x, y, size, color = '#214d58', weight = 700
+        ) {
+            c.font = `${weight} ${size}px system-ui, sans-serif`;
+            c.fillStyle = color;
+            c.textAlign = 'center';
+            c.fillText(text, x, y);
+        }
+
+        function cloud(x, y, k) {
+            c.save();
+            c.translate(x, y);
+            c.scale(k, k);
+            c.fillStyle = '#ffffffb8';
+            c.beginPath();
+            c.ellipse(0, 0, 66, 20, 0, 0, Math.PI * 2);
+            c.ellipse(-22, -15, 27, 26, 0, 0, Math.PI * 2);
+            c.ellipse(17, -24, 35, 35, 0, 0, Math.PI * 2);
+            c.fill();
+            c.restore();
+        }
+
+        function scenery() {
+            const sky = c.createLinearGradient(0, 0, 0, HEIGHT);
+            sky.addColorStop(0, '#78cde2');
+            sky.addColorStop(0.65, '#d0f0ec');
+            sky.addColorStop(1, '#f8edc8');
+            c.fillStyle = sky;
+            c.fillRect(0, 0, WIDTH, HEIGHT);
+
+            // 太陽
+            c.fillStyle = '#fff3bd';
+            c.beginPath();
+            c.arc(1055, 130, 55, 0, Math.PI * 2);
+            c.fill();
+
+            c.fillStyle = '#fff8cf44';
+            c.beginPath();
+            c.arc(1055, 130, 78, 0, Math.PI * 2);
+            c.fill();
+
+            // 飄動雲朵
+            for (let i = 0; i < 7; i++) {
+                cloud(
+                    ((i * 241 - visualFrame * 0.22 + 1600) % 1600) - 160,
+                    110 + (i % 3) * 70,
+                    0.7 + (i % 2) * 0.4
+                );
+            }
+
+            // 遠山
+            for (let layer = 0; layer < 2; layer++) {
+                c.beginPath();
+                c.moveTo(0, 670);
+                for (let x = 0; x <= WIDTH; x += 8) {
+                    c.lineTo(
+                        x,
+                        530 + layer * 66 +
+                        Math.sin(x * 0.006 + layer * 2) * 35 +
+                        Math.sin(x * 0.012) * 12
+                    );
+                }
+                c.lineTo(WIDTH, 670);
+                c.closePath();
+                c.fillStyle = layer ? '#8ecbbb' : '#acdcd0';
+                c.fill();
+            }
+
+            // 草地與地面
+            c.fillStyle = '#68ae87';
+            c.fillRect(0, 670, WIDTH, 10);
+            c.fillStyle = '#b9d698';
+            c.fillRect(0, 680, WIDTH, 7);
+
+            const dirt = c.createLinearGradient(0, 687, 0, 720);
+            dirt.addColorStop(0, '#f1e5bd');
+            dirt.addColorStop(1, '#d8c99f');
+            c.fillStyle = dirt;
+            c.fillRect(0, 687, WIDTH, 33);
+
+            c.fillStyle = '#b5a77b55';
+            for (let i = 0; i < 45; i++) {
+                c.fillRect(
+                    (i * 34 - visualFrame * 2 + 1500) % 1500,
+                    702, 15, 3
+                );
+            }
+        }
+
+        function drawPipe() {
+            const g = c.createLinearGradient(
+                pipe.x, 0, pipe.x + pipe.width, 0
+            );
+            g.addColorStop(0, '#3c9d81');
+            g.addColorStop(0.3, '#85dab0');
+            g.addColorStop(0.65, '#58bb94');
+            g.addColorStop(1, '#31896f');
+
+            const lower = pipe.topHeight + pipe.gap;
+            c.shadowColor = '#285f5424';
+            c.shadowBlur = 12;
+            c.shadowOffsetX = 6;
+
+            pill(
+                pipe.x, -20, pipe.width,
+                pipe.topHeight + 20, g, 10
+            );
+            pill(
+                pipe.x, lower, pipe.width,
+                670 - lower + 10, g, 10
+            );
+
+            pill(
+                pipe.x, pipe.topHeight - 30,
+                pipe.width, 30, '#3b9e7d', 7
+            );
+            pill(
+                pipe.x, lower,
+                pipe.width, 30, '#3b9e7d', 7
+            );
+
+            c.shadowBlur = 0;
+            c.shadowOffsetX = 0;
+            pill(
+                pipe.x + 6, pipe.topHeight - 26,
+                pipe.width - 12, 6, '#a7edc6', 3
+            );
+            pill(
+                pipe.x + 6, lower + 4,
+                pipe.width - 12, 6, '#a7edc6', 3
+            );
+        }
+
+        function drawBird() {
+            c.save();
+
+            const idle = currentState === STATES.START
+                ? Math.sin(visualFrame * 0.06) * 9
+                : 0;
+            c.translate(bird.x, bird.y + idle);
+            c.rotate(
+                currentState === STATES.PLAYING
+                    ? Math.max(-0.35, Math.min(0.65, bird.velocity * 0.055))
+                    : -0.08
+            );
+
+            // 身體
+            c.shadowColor = '#6d581d35';
+            c.shadowBlur = 10;
+            c.shadowOffsetY = 5;
+            c.fillStyle = '#f8c747';
+            c.beginPath();
+            c.ellipse(0, 0, 27, 23, 0, 0, Math.PI * 2);
+            c.fill();
+            c.shadowBlur = 0;
+            c.shadowOffsetY = 0;
+
+            // 肚子
+            c.fillStyle = '#ffe895';
+            c.beginPath();
+            c.ellipse(4, 8, 18, 12, 0, 0, Math.PI * 2);
+            c.fill();
+
+            // 拍動翅膀
+            c.fillStyle = '#eaa431';
+            c.beginPath();
+            c.ellipse(
+                -12, 5 + Math.sin(visualFrame * 0.35) * 4,
+                14, 8, -0.25, 0, Math.PI * 2
+            );
+            c.fill();
+
+            // 眼睛
+            c.fillStyle = 'white';
+            c.beginPath();
+            c.ellipse(12, -8, 9, 11, 0, 0, Math.PI * 2);
+            c.fill();
+
+            c.fillStyle = '#234752';
+            c.beginPath();
+            c.arc(15, -7, 4, 0, Math.PI * 2);
+            c.fill();
+
+            // 鳥嘴
+            c.fillStyle = '#f18948';
+            c.beginPath();
+            c.moveTo(23, -2);
+            c.lineTo(37, 3);
+            c.lineTo(23, 8);
+            c.closePath();
+            c.fill();
+
+            c.restore();
+        }
+
+        function panel(title, sub, over = false) {
+            c.fillStyle = '#153e4d38';
+            c.fillRect(0, 0, WIDTH, HEIGHT);
+
+            c.shadowColor = '#17444d30';
+            c.shadowBlur = 40;
+            c.shadowOffsetY = 18;
+            pill(380, 155, 520, 410, '#fffdf2f5', 32);
+            c.shadowBlur = 0;
+            c.shadowOffsetY = 0;
+
+            pill(570, 185, 140, 30, '#e6f2e8', 15);
+            label(
+                over ? 'FLIGHT COMPLETE' : 'FLAPPY BIRD',
+                640, 206, 14, '#41856d'
+            );
+            label(title, 640, 275, 48);
+            label(sub, 640, 316, 18, '#779093', 500);
+
+            if (over) {
+                pill(422, 340, 207, 90, '#eef5ed', 18);
+                pill(651, 340, 207, 90, '#fff1ce', 18);
+                label('本次得分', 525, 369, 16, '#728e85');
+                label(score, 525, 412, 34);
+                label('最佳紀錄', 754, 369, 16, '#ab8a3f');
+                label(best, 754, 412, 34, '#aa8231');
+            } else {
+                label(
+                    '穿越水管，讓每一次拍翅都更靠近目標',
+                    640, 370, 19, '#637e81', 500
+                );
+                label(
+                    '按 W 拍翅  ·  也可點擊畫面',
+                    640, 414, 19, '#637e81', 500
+                );
+            }
+
+            pill(440, 458, 400, 58, '#245b60', 18);
+            label(
+                over ? '按 W / R 再飛一次' : '按 W 或點擊開始飛行',
+                640, 495, 22, '#fff'
+            );
+            label(
+                '準備好後，將有 3 秒倒數',
+                640, 544, 15, '#8ba09f', 500
+            );
+        }
+
+        // 滑鼠與觸控操作
+        canvasElement.addEventListener('pointerdown', () => {
+            if (currentState === STATES.PLAYING) {
+                triggerFlap();
+            } else if (
+                currentState === STATES.START ||
+                currentState === STATES.GAMEOVER
+            ) {
                 startCountdown();
             }
         });
 
         function gameLoop() {
-            // 1. 背景
-            canvasCtx.fillStyle = '#70c5ce';
-            canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
+            visualFrame++;
+            scenery();
 
-            // 2. 遊戲物理邏輯
+            // 遊戲物理與碰撞判定
             if (currentState === STATES.PLAYING) {
                 bird.velocity += bird.gravity;
                 bird.y += bird.velocity;
@@ -128,109 +438,62 @@
                     score++;
                 }
 
-                // 碰撞判定 (邊界與水管)
-                if (bird.y - bird.radius < 0 || bird.y + bird.radius > HEIGHT - GROUND_HEIGHT) {
+                if (
+                    bird.y - bird.radius < 0 ||
+                    bird.y + bird.radius > HEIGHT - GROUND_HEIGHT
+                ) {
                     currentState = STATES.GAMEOVER;
                 }
-                if (bird.x + bird.radius > pipe.x && bird.x - bird.radius < pipe.x + pipe.width) {
-                    if (bird.y - bird.radius < pipe.topHeight || bird.y + bird.radius > pipe.topHeight + pipe.gap) {
+
+                if (
+                    bird.x + bird.radius > pipe.x &&
+                    bird.x - bird.radius < pipe.x + pipe.width
+                ) {
+                    if (
+                        bird.y - bird.radius < pipe.topHeight ||
+                        bird.y + bird.radius > pipe.topHeight + pipe.gap
+                    ) {
                         currentState = STATES.GAMEOVER;
                     }
                 }
             }
 
-            // 3. 繪製遊戲主體 (COUNTDOWN / PLAYING / GAMEOVER)
-            if (currentState === STATES.PLAYING || currentState === STATES.GAMEOVER || currentState === STATES.COUNTDOWN) {
-                // 水管
-                canvasCtx.fillStyle = '#73bf2e';
-                canvasCtx.fillRect(pipe.x, 0, pipe.width, pipe.topHeight);
-                canvasCtx.fillRect(pipe.x, pipe.topHeight + pipe.gap, pipe.width, HEIGHT - GROUND_HEIGHT - (pipe.topHeight + pipe.gap));
-                
-                canvasCtx.strokeStyle = '#53821a';
-                canvasCtx.lineWidth = 4;
-                canvasCtx.strokeRect(pipe.x, 0, pipe.width, pipe.topHeight);
-                canvasCtx.strokeRect(pipe.x, pipe.topHeight + pipe.gap, pipe.width, HEIGHT - GROUND_HEIGHT - (pipe.topHeight + pipe.gap));
+            if (currentState !== STATES.START) drawPipe();
+            drawBird();
 
-                // 地板
-                canvasCtx.fillStyle = '#ded895';
-                canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, GROUND_HEIGHT);
-                canvasCtx.fillStyle = '#4fa32d';
-                canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, 12);
+            pill(28, 26, 220, 46, '#ffffffaa', 18);
+            label('晴空飛行  /  SKY BIRD', 138, 56, 17);
 
-                // 小鳥
-                canvasCtx.beginPath();
-                canvasCtx.arc(bird.x, bird.y, bird.radius, 0, 2 * Math.PI);
-                canvasCtx.fillStyle = '#f61010';
-                canvasCtx.fill();
-                canvasCtx.strokeStyle = '#000';
-                canvasCtx.lineWidth = 3;
-                canvasCtx.stroke();
+            if (currentState === STATES.PLAYING) {
+                pill(1050, 24, 200, 78, '#fffdf2e8', 22);
+                label('SCORE', 1150, 49, 12, '#7a9791');
+                label(String(score).padStart(2, '0'), 1150, 85, 32);
 
-                // 遊戲進行中時顯示右上角分數
-                if (currentState === STATES.PLAYING) {
-                    canvasCtx.fillStyle = 'white';
-                    canvasCtx.strokeStyle = 'black';
-                    canvasCtx.lineWidth = 6;
-                    canvasCtx.font = 'bold 45px Arial';
-                    canvasCtx.textAlign = 'right';
-                    canvasCtx.strokeText(`Score: ${score}`, WIDTH - 40, 70);
-                    canvasCtx.fillText(`Score: ${score}`, WIDTH - 40, 70);
-                }
+                pill(30, 595, 256, 44, '#ffffff9c', 16);
+                label('W 拍翅  ·  穿越水管', 158, 624, 17);
             }
 
-            // 4. 畫面 overlay 狀態處理
             if (currentState === STATES.START) {
-                // 地板與背景
-                canvasCtx.fillStyle = '#ded895';
-                canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, GROUND_HEIGHT);
-                canvasCtx.fillStyle = '#4fa32d';
-                canvasCtx.fillRect(0, HEIGHT - GROUND_HEIGHT, WIDTH, 12);
-
-                // 小鳥
-                canvasCtx.beginPath();
-                canvasCtx.arc(bird.x, bird.y, bird.radius, 0, 2 * Math.PI);
-                canvasCtx.fillStyle = '#f61010';
-                canvasCtx.fill();
-                canvasCtx.strokeStyle = '#000';
-                canvasCtx.lineWidth = 3;
-                canvasCtx.stroke();
-
-                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-                canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
-
-                canvasCtx.fillStyle = '#ffffff';
-                canvasCtx.font = 'bold 60px Arial';
-                canvasCtx.textAlign = 'center';
-                canvasCtx.fillText("Flappy Bird", WIDTH / 2, HEIGHT / 2);
+                panel('晴空飛行', '展開翅膀，飛向下一道風景');
             } else if (currentState === STATES.COUNTDOWN) {
-                // 3秒倒數蒙版與數字顯示
-                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
-
-                canvasCtx.fillStyle = '#ffffff';
-                canvasCtx.strokeStyle = '#000000';
-                canvasCtx.lineWidth = 8;
-                canvasCtx.font = 'bold 120px Arial';
-                canvasCtx.textAlign = 'center';
-                canvasCtx.strokeText(countdownNumber, WIDTH / 2, HEIGHT / 2 + 40);
-                canvasCtx.fillText(countdownNumber, WIDTH / 2, HEIGHT / 2 + 40);
+                c.fillStyle = '#153e4d25';
+                c.fillRect(0, 0, WIDTH, HEIGHT);
+                pill(535, 225, 210, 220, '#fffdf2ee', 36);
+                label('準備起飛', 640, 274, 22);
+                label(countdownNumber, 640, 387, 100);
+                label('按 W 讓小鳥向上飛', 640, 493, 22);
             } else if (currentState === STATES.GAMEOVER) {
-                canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-                canvasCtx.fillRect(0, 0, WIDTH, HEIGHT);
-                
-                // GAME OVER 標題
-                canvasCtx.fillStyle = '#f61010';
-                canvasCtx.font = 'bold 70px Arial';
-                canvasCtx.textAlign = 'center';
-                canvasCtx.fillText("GAME OVER", WIDTH / 2, HEIGHT / 2 - 50);
-
-                // 正中央顯示最終分數
-                canvasCtx.fillStyle = '#ffffff';
-                canvasCtx.strokeStyle = '#000000';
-                canvasCtx.lineWidth = 6;
-                canvasCtx.font = 'bold 50px Arial';
-                canvasCtx.strokeText(`Score: ${score}`, WIDTH / 2, HEIGHT / 2 + 30);
-                canvasCtx.fillText(`Score: ${score}`, WIDTH / 2, HEIGHT / 2 + 30);
+                if (score > best) {
+                    best = score;
+                    try {
+                        localStorage.setItem('skyBirdBest', best);
+                    } catch (e) {}
+                }
+                panel(
+                    '再一次，飛得更遠',
+                    '調整節奏，下一次會更精彩',
+                    true
+                );
             }
 
             requestAnimationFrame(gameLoop);
