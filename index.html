@@ -28,12 +28,219 @@
             box-shadow: 0 24px 100px #071c3280;
             touch-action: none;
         }
+        #login {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            background: #153e4d38;
+            padding: 20px;
+        }
+        #login[hidden] { display: none; }
+        .card {
+            width: min(460px, 100%);
+            padding: 36px;
+            border-radius: 28px;
+            background: #fffdf2;
+            box-shadow: 0 20px 70px #123b4d33;
+            text-align: center;
+            color: #214d58;
+        }
+        .tag {
+            color: #41856d;
+            letter-spacing: 3px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        h1 { font-size: 38px; margin: 14px 0 10px; }
+        .intro { color: #637e81; line-height: 1.7; }
+        .name-label {
+            display: block;
+            text-align: left;
+            margin: 24px 0 8px;
+            font-weight: 700;
+        }
+        input {
+            width: 100%;
+            padding: 14px 16px;
+            font: inherit;
+            border: 2px solid #c8ddd4;
+            border-radius: 12px;
+            background: white;
+            color: #214d58;
+        }
+        input:focus {
+            outline: 3px solid #9bd3c266;
+            border-color: #41856d;
+        }
+        #personalBest { margin: 16px 0; color: #41856d; }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #245b60;
+            border: 0;
+            border-radius: 14px;
+            color: white;
+            font: 700 18px system-ui;
+            cursor: pointer;
+        }
+        .note {
+            font-size: 13px;
+            color: #8ba09f;
+            line-height: 1.6;
+            margin-bottom: 0;
+        }
+        #storageWarning {
+            position: fixed;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 16px;
+            background: #fff1ce;
+            color: #715223;
+            border-radius: 12px;
+            font: 14px system-ui;
+            text-align: center;
+        }
+        #fullscreenButton {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            z-index: 20;
+            width: auto;
+            padding: 10px 16px;
+            border: 1px solid #ffffff66;
+            border-radius: 12px;
+            background: #245b60e8;
+            font-size: 15px;
+            box-shadow: 0 4px 16px #143e4d25;
+        }
+        #fullscreenButton:focus-visible {
+            outline: 3px solid #f8c747;
+            outline-offset: 3px;
+        }
+        #fullscreenMessage {
+            position: fixed;
+            top: 62px;
+            right: 12px;
+            z-index: 20;
+            max-width: 300px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: #fff1ce;
+            color: #715223;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
+    <button id="fullscreenButton" type="button"
+            aria-label="進入全螢幕" aria-pressed="false">
+        ⛶ 全螢幕 · F
+    </button>
+    <div id="fullscreenMessage" role="status" hidden></div>
+
     <canvas id="gameCanvas" width="1280" height="720"></canvas>
 
+    <section id="login" aria-label="玩家登入">
+        <form class="card" id="loginForm">
+            <div class="tag">FLAPPY BIRD</div>
+            <h1>晴空飛行</h1>
+            <p class="intro">輸入名字接續紀錄，或留空直接遊玩</p>
+            <label class="name-label" for="playerName">玩家名字（選填）</label>
+            <input id="playerName" name="playerName"
+                   placeholder="例如：丁一，或留空以訪客遊玩"
+                   maxlength="30" autocomplete="off">
+            <p id="personalBest" aria-live="polite">
+                留空以訪客遊玩，不儲存最高紀錄
+            </p>
+            <button type="submit">開始飛行</button>
+            <p class="note">
+                同一名字共用紀錄，無需密碼；留空則以訪客遊玩。<br>
+                紀錄儲存在此瀏覽器；清除瀏覽器資料會刪除紀錄。
+            </p>
+        </form>
+    </section>
+
+    <div id="storageWarning" role="status" hidden>
+        瀏覽器無法儲存紀錄，目前的分數只會保留到頁面關閉。
+    </div>
+
     <script>
+        // 全螢幕功能
+        const fullscreenButton = document.getElementById('fullscreenButton');
+        const fullscreenMessage = document.getElementById('fullscreenMessage');
+
+        function fullscreenElement() {
+            return document.fullscreenElement ||
+                   document.webkitFullscreenElement;
+        }
+
+        function updateFullscreenButton() {
+            const active = !!fullscreenElement();
+
+            fullscreenButton.textContent = active
+                ? '⛶ 退出全螢幕 · F'
+                : '⛶ 全螢幕 · F';
+
+            fullscreenButton.setAttribute(
+                'aria-label',
+                active ? '退出全螢幕' : '進入全螢幕'
+            );
+            fullscreenButton.setAttribute('aria-pressed', String(active));
+        }
+
+        async function toggleFullscreen() {
+            fullscreenMessage.hidden = true;
+
+            try {
+                if (fullscreenElement()) {
+                    const exit = document.exitFullscreen ||
+                                 document.webkitExitFullscreen;
+                    if (!exit) throw new Error('unsupported');
+                    await exit.call(document);
+                } else {
+                    const root = document.documentElement;
+                    const enter = root.requestFullscreen ||
+                                  root.webkitRequestFullscreen;
+                    if (!enter) throw new Error('unsupported');
+                    await enter.call(root);
+                }
+
+                updateFullscreenButton();
+            } catch (e) {
+                fullscreenMessage.textContent =
+                    '無法進入全螢幕，請使用瀏覽器的全螢幕選項，或將 HTML 直接在瀏覽器開啟。';
+                fullscreenMessage.hidden = false;
+            }
+        }
+
+        fullscreenButton.addEventListener('click', toggleFullscreen);
+        document.addEventListener('fullscreenchange', updateFullscreenButton);
+        document.addEventListener(
+            'webkitfullscreenchange',
+            updateFullscreenButton
+        );
+
+        window.addEventListener('keydown', e => {
+            if (
+                e.target.tagName === 'INPUT' ||
+                e.target.tagName === 'TEXTAREA' ||
+                e.target.isContentEditable
+            ) return;
+
+            if (
+                e.key.toLowerCase() === 'f' &&
+                !e.repeat &&
+                !e.ctrlKey &&
+                !e.metaKey &&
+                !e.altKey
+            ) {
+                e.preventDefault();
+                toggleFullscreen();
+            }
+        });
+
         const canvasElement = document.getElementById('gameCanvas');
         const canvasCtx = canvasElement.getContext('2d');
 
@@ -43,6 +250,7 @@
             PLAYING: 'PLAYING',
             GAMEOVER: 'GAMEOVER'
         };
+
         let currentState = STATES.START;
 
         const WIDTH = canvasElement.width;
@@ -57,6 +265,7 @@
             gravity: 0.5,
             flapPower: -10
         };
+
         let pipe = {
             x: WIDTH,
             width: 90,
@@ -78,22 +287,26 @@
                         window.AudioContext || window.webkitAudioContext
                     )();
                 }
+
                 if (audioCtx.state === 'suspended') audioCtx.resume();
 
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
+
                 osc.connect(gain);
                 gain.connect(audioCtx.destination);
-
                 osc.type = 'triangle';
+
                 osc.frequency.setValueAtTime(250, audioCtx.currentTime);
                 osc.frequency.exponentialRampToValueAtTime(
                     550, audioCtx.currentTime + 0.12
                 );
+
                 gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(
                     0.01, audioCtx.currentTime + 0.12
                 );
+
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.12);
             } catch (e) {}
@@ -114,18 +327,27 @@
         }
 
         function startCountdown() {
+            if (!login.hidden) return;
+
             bird.y = HEIGHT / 2;
             bird.velocity = 0;
             score = 0;
             resetPipe();
+
             currentState = STATES.COUNTDOWN;
             countdownNumber = 3;
 
-            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
 
-            if (countdownInterval) clearInterval(countdownInterval);
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+
             countdownInterval = setInterval(() => {
                 countdownNumber--;
+
                 if (countdownNumber <= 0) {
                     clearInterval(countdownInterval);
                     currentState = STATES.PLAYING;
@@ -134,9 +356,17 @@
             }, 1000);
         }
 
-        // W 拍翅；遊戲結束後可按 W 或 R 重玩
-        window.addEventListener('keydown', (e) => {
+        // W 拍翅、W / R 重玩、N 更換玩家
+        window.addEventListener('keydown', e => {
+            if (!login.hidden || e.target.tagName === 'INPUT') return;
+
             const key = e.key.toLowerCase();
+
+            if (key === 'n' && currentState === STATES.GAMEOVER) {
+                showLogin();
+                return;
+            }
+
             if (key === 'w') {
                 if (currentState === STATES.PLAYING) {
                     triggerFlap();
@@ -153,12 +383,94 @@
             }
         });
 
+        // 玩家名字與個人最高分
         let visualFrame = 0;
         let best = 0;
-        try {
-            best = Number(localStorage.getItem('skyBirdBest')) || 0;
-        } catch (e) {}
+        let activeName = '';
 
+        const login = document.getElementById('login');
+        const nameInput = document.getElementById('playerName');
+        const bestPreview = document.getElementById('personalBest');
+
+        const memoryRecords = new Map();
+
+        const accountKey = name =>
+            'skyBirdBest:player:' + encodeURIComponent(name);
+
+        const cleanName = name => name.trim().normalize('NFC');
+
+        function readBest(name) {
+            let record = memoryRecords.get(name) || 0;
+
+            try {
+                const stored = Number(
+                    localStorage.getItem(accountKey(name))
+                );
+
+                if (Number.isFinite(stored) && stored >= 0) {
+                    record = Math.max(record, Math.floor(stored));
+                }
+            } catch (e) {
+                document.getElementById('storageWarning').hidden = false;
+            }
+
+            memoryRecords.set(name, record);
+            return record;
+        }
+
+        function saveBest() {
+            if (!activeName) {
+                best = Math.max(best, score);
+                return;
+            }
+
+            best = Math.max(best, readBest(activeName), score);
+            memoryRecords.set(activeName, best);
+
+            try {
+                localStorage.setItem(
+                    accountKey(activeName),
+                    String(best)
+                );
+            } catch (e) {
+                document.getElementById('storageWarning').hidden = false;
+            }
+        }
+
+        function previewName() {
+            const name = cleanName(nameInput.value);
+            nameInput.setCustomValidity('');
+
+            bestPreview.textContent = name
+                ? `你的最高紀錄：${readBest(name)} 分`
+                : '留空以訪客遊玩，不儲存最高紀錄';
+        }
+
+        function showLogin() {
+            currentState = STATES.START;
+            login.hidden = false;
+            previewName();
+            nameInput.focus();
+        }
+
+        nameInput.addEventListener('input', previewName);
+
+        document.getElementById('loginForm').addEventListener('submit', e => {
+            e.preventDefault();
+
+            const name = cleanName(nameInput.value);
+            activeName = name;
+            nameInput.value = name;
+            best = name ? readBest(name) : 0;
+
+            login.hidden = true;
+            nameInput.blur();
+            startCountdown();
+        });
+
+        nameInput.focus();
+
+        // 畫面繪製
         const c = canvasCtx;
 
         function pill(x, y, w, h, color, r = 20) {
@@ -182,11 +494,13 @@
             c.translate(x, y);
             c.scale(k, k);
             c.fillStyle = '#ffffffb8';
+
             c.beginPath();
             c.ellipse(0, 0, 66, 20, 0, 0, Math.PI * 2);
             c.ellipse(-22, -15, 27, 26, 0, 0, Math.PI * 2);
             c.ellipse(17, -24, 35, 35, 0, 0, Math.PI * 2);
             c.fill();
+
             c.restore();
         }
 
@@ -195,6 +509,7 @@
             sky.addColorStop(0, '#78cde2');
             sky.addColorStop(0.65, '#d0f0ec');
             sky.addColorStop(1, '#f8edc8');
+
             c.fillStyle = sky;
             c.fillRect(0, 0, WIDTH, HEIGHT);
 
@@ -209,7 +524,7 @@
             c.arc(1055, 130, 78, 0, Math.PI * 2);
             c.fill();
 
-            // 飄動雲朵
+            // 雲朵
             for (let i = 0; i < 7; i++) {
                 cloud(
                     ((i * 241 - visualFrame * 0.22 + 1600) % 1600) - 160,
@@ -222,6 +537,7 @@
             for (let layer = 0; layer < 2; layer++) {
                 c.beginPath();
                 c.moveTo(0, 670);
+
                 for (let x = 0; x <= WIDTH; x += 8) {
                     c.lineTo(
                         x,
@@ -230,25 +546,29 @@
                         Math.sin(x * 0.012) * 12
                     );
                 }
+
                 c.lineTo(WIDTH, 670);
                 c.closePath();
                 c.fillStyle = layer ? '#8ecbbb' : '#acdcd0';
                 c.fill();
             }
 
-            // 草地與地面
+            // 地面
             c.fillStyle = '#68ae87';
             c.fillRect(0, 670, WIDTH, 10);
+
             c.fillStyle = '#b9d698';
             c.fillRect(0, 680, WIDTH, 7);
 
             const dirt = c.createLinearGradient(0, 687, 0, 720);
             dirt.addColorStop(0, '#f1e5bd');
             dirt.addColorStop(1, '#d8c99f');
+
             c.fillStyle = dirt;
             c.fillRect(0, 687, WIDTH, 33);
 
             c.fillStyle = '#b5a77b55';
+
             for (let i = 0; i < 45; i++) {
                 c.fillRect(
                     (i * 34 - visualFrame * 2 + 1500) % 1500,
@@ -261,29 +581,33 @@
             const g = c.createLinearGradient(
                 pipe.x, 0, pipe.x + pipe.width, 0
             );
+
             g.addColorStop(0, '#3c9d81');
             g.addColorStop(0.3, '#85dab0');
             g.addColorStop(0.65, '#58bb94');
             g.addColorStop(1, '#31896f');
 
             const lower = pipe.topHeight + pipe.gap;
+
             c.shadowColor = '#285f5424';
             c.shadowBlur = 12;
             c.shadowOffsetX = 6;
 
             pill(
-                pipe.x, -20, pipe.width,
-                pipe.topHeight + 20, g, 10
+                pipe.x, -20,
+                pipe.width, pipe.topHeight + 20, g, 10
             );
+
             pill(
-                pipe.x, lower, pipe.width,
-                670 - lower + 10, g, 10
+                pipe.x, lower,
+                pipe.width, 670 - lower + 10, g, 10
             );
 
             pill(
                 pipe.x, pipe.topHeight - 30,
                 pipe.width, 30, '#3b9e7d', 7
             );
+
             pill(
                 pipe.x, lower,
                 pipe.width, 30, '#3b9e7d', 7
@@ -291,10 +615,12 @@
 
             c.shadowBlur = 0;
             c.shadowOffsetX = 0;
+
             pill(
                 pipe.x + 6, pipe.topHeight - 26,
                 pipe.width - 12, 6, '#a7edc6', 3
             );
+
             pill(
                 pipe.x + 6, lower + 4,
                 pipe.width - 12, 6, '#a7edc6', 3
@@ -307,7 +633,9 @@
             const idle = currentState === STATES.START
                 ? Math.sin(visualFrame * 0.06) * 9
                 : 0;
+
             c.translate(bird.x, bird.y + idle);
+
             c.rotate(
                 currentState === STATES.PLAYING
                     ? Math.max(-0.35, Math.min(0.65, bird.velocity * 0.055))
@@ -318,10 +646,12 @@
             c.shadowColor = '#6d581d35';
             c.shadowBlur = 10;
             c.shadowOffsetY = 5;
+
             c.fillStyle = '#f8c747';
             c.beginPath();
             c.ellipse(0, 0, 27, 23, 0, 0, Math.PI * 2);
             c.fill();
+
             c.shadowBlur = 0;
             c.shadowOffsetY = 0;
 
@@ -335,7 +665,8 @@
             c.fillStyle = '#eaa431';
             c.beginPath();
             c.ellipse(
-                -12, 5 + Math.sin(visualFrame * 0.35) * 4,
+                -12,
+                5 + Math.sin(visualFrame * 0.35) * 4,
                 14, 8, -0.25, 0, Math.PI * 2
             );
             c.fill();
@@ -370,23 +701,29 @@
             c.shadowColor = '#17444d30';
             c.shadowBlur = 40;
             c.shadowOffsetY = 18;
+
             pill(380, 155, 520, 410, '#fffdf2f5', 32);
+
             c.shadowBlur = 0;
             c.shadowOffsetY = 0;
 
             pill(570, 185, 140, 30, '#e6f2e8', 15);
+
             label(
                 over ? 'FLIGHT COMPLETE' : 'FLAPPY BIRD',
                 640, 206, 14, '#41856d'
             );
+
             label(title, 640, 275, 48);
             label(sub, 640, 316, 18, '#779093', 500);
 
             if (over) {
                 pill(422, 340, 207, 90, '#eef5ed', 18);
                 pill(651, 340, 207, 90, '#fff1ce', 18);
+
                 label('本次得分', 525, 369, 16, '#728e85');
                 label(score, 525, 412, 34);
+
                 label('最佳紀錄', 754, 369, 16, '#ab8a3f');
                 label(best, 754, 412, 34, '#aa8231');
             } else {
@@ -394,6 +731,7 @@
                     '穿越水管，讓每一次拍翅都更靠近目標',
                     640, 370, 19, '#637e81', 500
                 );
+
                 label(
                     '按 W 拍翅  ·  也可點擊畫面',
                     640, 414, 19, '#637e81', 500
@@ -401,18 +739,22 @@
             }
 
             pill(440, 458, 400, 58, '#245b60', 18);
+
             label(
                 over ? '按 W / R 再飛一次' : '按 W 或點擊開始飛行',
                 640, 495, 22, '#fff'
             );
+
             label(
-                '準備好後，將有 3 秒倒數',
+                over ? '按 N 更換玩家' : '準備好後，將有 3 秒倒數',
                 640, 544, 15, '#8ba09f', 500
             );
         }
 
         // 滑鼠與觸控操作
         canvasElement.addEventListener('pointerdown', () => {
+            if (!login.hidden) return;
+
             if (currentState === STATES.PLAYING) {
                 triggerFlap();
             } else if (
@@ -423,21 +765,40 @@
             }
         });
 
-        function gameLoop() {
-            visualFrame++;
+        // 原本遊戲速度
+        const GAME_SPEED = 1;
+        let previousFrameTime = null;
+
+        function gameLoop(timestamp) {
+            const elapsed = previousFrameTime === null
+                ? 1
+                : Math.min(
+                    2,
+                    Math.max(
+                        0,
+                        (timestamp - previousFrameTime) / (1000 / 60)
+                    )
+                );
+
+            previousFrameTime = timestamp;
+
+            const step = elapsed * GAME_SPEED;
+            visualFrame += step;
+
             scenery();
 
-            // 遊戲物理與碰撞判定
             if (currentState === STATES.PLAYING) {
-                bird.velocity += bird.gravity;
-                bird.y += bird.velocity;
+                bird.velocity += bird.gravity * step;
+                bird.y += bird.velocity * step;
 
-                pipe.x -= pipe.speed;
+                pipe.x -= pipe.speed * step;
+
                 if (pipe.x < -pipe.width) {
                     resetPipe();
                     score++;
                 }
 
+                // 邊界碰撞
                 if (
                     bird.y - bird.radius < 0 ||
                     bird.y + bird.radius > HEIGHT - GROUND_HEIGHT
@@ -445,6 +806,7 @@
                     currentState = STATES.GAMEOVER;
                 }
 
+                // 水管碰撞
                 if (
                     bird.x + bird.radius > pipe.x &&
                     bird.x - bird.radius < pipe.x + pipe.width
@@ -459,6 +821,7 @@
             }
 
             if (currentState !== STATES.START) drawPipe();
+
             drawBird();
 
             pill(28, 26, 220, 46, '#ffffffaa', 18);
@@ -467,31 +830,41 @@
             if (currentState === STATES.PLAYING) {
                 pill(1050, 24, 200, 78, '#fffdf2e8', 22);
                 label('SCORE', 1150, 49, 12, '#7a9791');
-                label(String(score).padStart(2, '0'), 1150, 85, 32);
+
+                label(
+                    String(score).padStart(2, '0'),
+                    1150, 85, 32
+                );
 
                 pill(30, 595, 256, 44, '#ffffff9c', 16);
                 label('W 拍翅  ·  穿越水管', 158, 624, 17);
+
+                label(
+                    `${activeName || "訪客"} · ${
+                        activeName ? "最高" : "本次遊玩最高"
+                    } ${best} 分`,
+                    WIDTH / 2, 56, 20
+                );
             }
 
             if (currentState === STATES.START) {
-                panel('晴空飛行', '展開翅膀，飛向下一道風景');
+                // 顯示名字輸入表單
             } else if (currentState === STATES.COUNTDOWN) {
                 c.fillStyle = '#153e4d25';
                 c.fillRect(0, 0, WIDTH, HEIGHT);
+
                 pill(535, 225, 210, 220, '#fffdf2ee', 36);
                 label('準備起飛', 640, 274, 22);
                 label(countdownNumber, 640, 387, 100);
                 label('按 W 讓小鳥向上飛', 640, 493, 22);
             } else if (currentState === STATES.GAMEOVER) {
-                if (score > best) {
-                    best = score;
-                    try {
-                        localStorage.setItem('skyBirdBest', best);
-                    } catch (e) {}
-                }
+                if (score > best) saveBest();
+
                 panel(
                     '再一次，飛得更遠',
-                    '調整節奏，下一次會更精彩',
+                    activeName
+                        ? `${activeName} · 專屬飛行紀錄`
+                        : "訪客遊玩 · 紀錄不儲存",
                     true
                 );
             }
